@@ -2,20 +2,22 @@ require('dotenv').config();
 
 const express = require('express');
 const session = require('express-session');
-const sqlite3 = require('sqlite3').verbose();
 const { Pool } = require('pg');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const DB_PATH = path.join(__dirname, 'data.sqlite');
 const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.SUPABASE_DB_URL;
 const USE_POSTGRES = Boolean(DATABASE_URL);
+const inMemoryState = {
+  appState: null,
+  users: {},
+};
 
 const db = USE_POSTGRES ? new Pool({
   connectionString: DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-}) : new sqlite3.Database(DB_PATH);
+}) : null;
 
 const STUDENT_ROSTER = {
   c1: [
@@ -138,24 +140,43 @@ function runSql(sql, params = []) {
   if (USE_POSTGRES) {
     return db.query(sql, params);
   }
-  return new Promise((resolve, reject) => {
-    db.run(sql, params, function(err) {
-      if (err) return reject(err);
-      resolve(this);
-    });
-  });
+
+  if (sql.includes('INSERT INTO users')) {
+    inMemoryState.users[params[0]] = params[1];
+    return Promise.resolve();
+  }
+
+  if (sql.includes('INSERT INTO app_data')) {
+    const key = params[0];
+    const value = params[1];
+    if (key === 'app_state') inMemoryState.appState = JSON.parse(value);
+    return Promise.resolve();
+  }
+
+  return Promise.resolve();
 }
 
 function getSql(sql, params = []) {
   if (USE_POSTGRES) {
     return db.query(sql, params).then((result) => result.rows[0] || null);
   }
-  return new Promise((resolve, reject) => {
-    db.get(sql, params, (err, row) => {
-      if (err) return reject(err);
-      resolve(row);
-    });
-  });
+
+  if (sql.includes('SELECT value FROM app_data WHERE key = ?')) {
+    return Promise.resolve({ value: JSON.stringify(inMemoryState.appState) });
+  }
+
+  if (sql.includes('SELECT password FROM users WHERE username = ?')) {
+    const username = params[0];
+    const password = inMemoryState.users[username];
+    return Promise.resolve(password ? { password } : null);
+  }
+
+  if (sql.includes('SELECT username FROM users WHERE username = ?')) {
+    const username = params[0];
+    return Promise.resolve(inMemoryState.users[username] ? { username } : null);
+  }
+
+  return Promise.resolve(null);
 }
 
 async function ensureDefaultUser() {
@@ -180,29 +201,16 @@ async function initializeDatabase() {
     return;
   }
 
-  return new Promise((resolve, reject) => {
-    db.serialize(() => {
-      db.run('CREATE TABLE IF NOT EXISTS app_data (key TEXT PRIMARY KEY, value TEXT)', async (err) => {
-        if (err) return reject(err);
-        try {
-          const row = await getSql('SELECT value FROM app_data WHERE key = ?', ['app_state']);
-          if (!row) {
-            await runSql('INSERT INTO app_data (key, value) VALUES (?, ?)', ['app_state', JSON.stringify(createDefaultState())]);
-          }
-          db.run('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)', async (userErr) => {
-            if (userErr) return reject(userErr);
-            await ensureDefaultUser();
-            resolve();
-          });
-        } catch (e) {
-          reject(e);
-        }
-      });
-    });
-  });
+  inMemoryState.appState = createDefaultState();
+  inMemoryState.users = {
+    [process.env.ADMIN_USERNAME || 'jkyfx']: process.env.ADMIN_PASSWORD || 'wangkun',
+  };
+  return;
 }
 
 async function readAppState() {
+  if (!USE_POSTGRES) return inMemoryState.appState;
+
   const row = await getSql('SELECT value FROM app_data WHERE key = ?', ['app_state']);
   if (!row) return createDefaultState();
   try {
@@ -214,6 +222,11 @@ async function readAppState() {
 
 async function writeAppState(nextState) {
   const safeState = nextState || createDefaultState();
+  if (!USE_POSTGRES) {
+    inMemoryState.appState = safeState;
+    return;
+  }
+
   await runSql('INSERT INTO app_data (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ['app_state', JSON.stringify(safeState)]);
 }
 
