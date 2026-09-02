@@ -524,10 +524,13 @@ const LOGIN_PASS = 'wangkun';
 const load = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch { return def; } };
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
 
+const API_BASE = (window.MATH_API_BASE_URL || '').replace(/\/$/, '');
+const apiUrl = (path) => `${API_BASE}${path}`;
+
 const API = {
   async checkSession() {
     try {
-      const res = await fetch('/api/session', { credentials: 'include' });
+      const res = await fetch(apiUrl('/api/session'), { credentials: 'include' });
       const data = await res.json();
       return !!data.loggedIn;
     } catch (e) {
@@ -535,7 +538,7 @@ const API = {
     }
   },
   async login(username, password) {
-    const res = await fetch('/api/login', {
+    const res = await fetch(apiUrl('/api/login'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
@@ -546,15 +549,15 @@ const API = {
     return data;
   },
   async logout() {
-    await fetch('/api/logout', { method: 'POST', credentials: 'include' });
+    await fetch(apiUrl('/api/logout'), { method: 'POST', credentials: 'include' });
   },
   async loadData() {
-    const res = await fetch('/api/data', { credentials: 'include' });
+    const res = await fetch(apiUrl('/api/data'), { credentials: 'include' });
     if (!res.ok) throw new Error('未登录或数据读取失败');
     return await res.json();
   },
   async saveData(payload) {
-    const res = await fetch('/api/data', {
+    const res = await fetch(apiUrl('/api/data'), {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },

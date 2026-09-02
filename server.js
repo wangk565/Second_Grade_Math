@@ -1,12 +1,21 @@
+require('dotenv').config();
+
 const express = require('express');
 const session = require('express-session');
 const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DB_PATH = path.join(__dirname, 'data.sqlite');
-const db = new sqlite3.Database(DB_PATH);
+const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.SUPABASE_DB_URL;
+const USE_POSTGRES = Boolean(DATABASE_URL);
+
+const db = USE_POSTGRES ? new Pool({
+  connectionString: DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+}) : new sqlite3.Database(DB_PATH);
 
 const STUDENT_ROSTER = {
   c1: [
@@ -126,6 +135,9 @@ function createDefaultState() {
 }
 
 function runSql(sql, params = []) {
+  if (USE_POSTGRES) {
+    return db.query(sql, params);
+  }
   return new Promise((resolve, reject) => {
     db.run(sql, params, function(err) {
       if (err) return reject(err);
@@ -135,6 +147,9 @@ function runSql(sql, params = []) {
 }
 
 function getSql(sql, params = []) {
+  if (USE_POSTGRES) {
+    return db.query(sql, params).then((result) => result.rows[0] || null);
+  }
   return new Promise((resolve, reject) => {
     db.get(sql, params, (err, row) => {
       if (err) return reject(err);
@@ -143,7 +158,28 @@ function getSql(sql, params = []) {
   });
 }
 
-function initializeDatabase() {
+async function ensureDefaultUser() {
+  const username = process.env.ADMIN_USERNAME || 'jkyfx';
+  const password = process.env.ADMIN_PASSWORD || 'wangkun';
+  const existing = await getSql('SELECT username FROM users WHERE username = ?', [username]);
+  if (!existing) {
+    await runSql('INSERT INTO users (username, password) VALUES (?, ?)', [username, password]);
+  }
+}
+
+async function initializeDatabase() {
+  if (USE_POSTGRES) {
+    await runSql('CREATE TABLE IF NOT EXISTS app_data (key TEXT PRIMARY KEY, value TEXT)');
+    await runSql('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)');
+
+    const row = await getSql('SELECT value FROM app_data WHERE key = ?', ['app_state']);
+    if (!row) {
+      await runSql('INSERT INTO app_data (key, value) VALUES (?, ?)', ['app_state', JSON.stringify(createDefaultState())]);
+    }
+    await ensureDefaultUser();
+    return;
+  }
+
   return new Promise((resolve, reject) => {
     db.serialize(() => {
       db.run('CREATE TABLE IF NOT EXISTS app_data (key TEXT PRIMARY KEY, value TEXT)', async (err) => {
@@ -155,10 +191,7 @@ function initializeDatabase() {
           }
           db.run('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)', async (userErr) => {
             if (userErr) return reject(userErr);
-            const existing = await getSql('SELECT username FROM users WHERE username = ?', ['jkyfx']);
-            if (!existing) {
-              await runSql('INSERT INTO users (username, password) VALUES (?, ?)', ['jkyfx', 'wangkun']);
-            }
+            await ensureDefaultUser();
             resolve();
           });
         } catch (e) {
@@ -184,16 +217,29 @@ async function writeAppState(nextState) {
   await runSql('INSERT INTO app_data (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', ['app_state', JSON.stringify(safeState)]);
 }
 
+app.use((req, res, next) => {
+  const origin = process.env.FRONTEND_ORIGIN || req.headers.origin || '*';
+  res.setHeader('Access-Control-Allow-Origin', origin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
+
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(session({
   secret: process.env.SESSION_SECRET || 'second-grade-math-demo-secret',
   resave: false,
   saveUninitialized: false,
+  proxy: true,
   cookie: {
     httpOnly: true,
     sameSite: 'lax',
-    secure: false,
+    secure: process.env.NODE_ENV === 'production' || !!process.env.RENDER,
     maxAge: 1000 * 60 * 60 * 24 * 7,
   },
 }));
@@ -204,7 +250,7 @@ function requireAuth(req, res, next) {
 }
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, time: new Date().toISOString() });
+  res.json({ ok: true, time: new Date().toISOString(), mode: USE_POSTGRES ? 'postgres' : 'sqlite' });
 });
 
 app.get('/api/session', (req, res) => {
@@ -213,10 +259,26 @@ app.get('/api/session', (req, res) => {
 
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body || {};
+  const expectedUsername = process.env.ADMIN_USERNAME || 'jkyfx';
+  const expectedPassword = process.env.ADMIN_PASSWORD || 'wangkun';
+
+  if (!username || !password) {
+    return res.status(401).json({ error: '用户名或密码不能为空' });
+  }
+
   const row = await getSql('SELECT password FROM users WHERE username = ?', [username]);
-  if (!row || row.password !== password || username !== 'jkyfx') {
+  const isMatch = Boolean(
+    row && row.password === password && username === expectedUsername
+  ) || (username === expectedUsername && password === expectedPassword);
+
+  if (!isMatch) {
     return res.status(401).json({ error: '用户名或密码错误' });
   }
+
+  if (!row) {
+    await runSql('INSERT INTO users (username, password) VALUES (?, ?)', [expectedUsername, expectedPassword]);
+  }
+
   req.session.user = username;
   return res.json({ ok: true, user: username });
 });

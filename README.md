@@ -10,6 +10,36 @@ https://wangk565.github.io/Second_Grade_Math/
 
 该在线版本适合快速体验功能、演示给老师或家长查看，以及在本地无后端环境下进行教学数据管理演示。
 
+## 免费真实部署方案（推荐）
+
+本项目已适配为“低成本真实管理系统”架构，推荐使用：
+
+- 前端：GitHub Pages / Cloudflare Pages
+- 后端：Render
+- 数据库：Supabase PostgreSQL
+- 认证：后端 session + 环境变量账号密码
+
+这样可以在不产生高额成本的前提下，保留登录、数据持久化和真实管理能力。
+
+关键部署变量：
+
+```bash
+DATABASE_URL=postgresql://...
+SESSION_SECRET=your-session-secret
+ADMIN_USERNAME=jkyfx
+ADMIN_PASSWORD=wangkun
+FRONTEND_ORIGIN=https://wangk565.github.io
+NODE_ENV=production
+```
+
+前端页在生产环境下可通过以下方式指定后端地址：
+
+```html
+<script>
+  window.MATH_API_BASE_URL = 'https://your-render-app.onrender.com';
+</script>
+```
+
 ## 项目简介
 
 本项目主要用于：

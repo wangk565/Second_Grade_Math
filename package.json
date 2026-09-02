@@ -20,8 +20,10 @@
   },
   "homepage": "https://github.com/wangk565/Second_Grade_Math#readme",
   "dependencies": {
+    "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "express-session": "^1.19.0",
+    "pg": "^8.23.0",
     "sqlite3": "^6.0.1"
   }
 }
