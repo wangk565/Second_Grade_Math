@@ -1,0 +1,27 @@
+{
+  "name": "second_grade_math",
+  "version": "1.0.0",
+  "description": "这是一个面向小学二年级数学教学场景的单页 Web 应用，帮助教师快速管理学生信息、记录作业等级、统计考试成绩以及跟踪班级积分表现。该项目使用纯前端实现，适合课堂教学辅助、数据可视化展示和教学成果管理。",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wangk565/Second_Grade_Math.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/wangk565/Second_Grade_Math/issues"
+  },
+  "homepage": "https://github.com/wangk565/Second_Grade_Math#readme",
+  "dependencies": {
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "sqlite3": "^6.0.1"
+  }
+}
