@@ -900,7 +900,7 @@ function openStudentModal(id){
       note: document.getElementById('f_note').value.trim(),
     };
     if(id){ Object.assign(s, data); } else { db.students.push({id:uid(), ...data, createdAt:Date.now()}); }
-    persist(); toast(id?'已更新学生信息':'已添加学生','success');
+    persist(); toast(id?'已更新学生信息':'已添加学生','success'); render();
     return true;
   });
 }
@@ -1037,7 +1037,7 @@ function openRecordModal(type, id){
     const data = { name, date:dateVal, classId:currentClass, scores };
     if(!isHw) data.total = +document.getElementById('r_total').value || 100;
     if(id){ Object.assign(r, data); } else { store.push({id:uid(), ...data}); }
-    persist(); toast(id?'已更新记录':'已保存记录','success');
+    persist(); toast(id?'已更新记录':'已保存记录','success'); render();
     return true;
   });
 }
@@ -1115,7 +1115,7 @@ function openPointsModal(){
     const amount = +document.getElementById('p_amount').value;
     if(!amount || amount<=0){ toast('请输入有效数额','error'); return false; }
     db.points.push({ id:uid(), studentId, date: document.getElementById('p_date').value, amount, reason: document.getElementById('p_reason').value.trim(), type: document.getElementById('p_type').value });
-    persist(); toast('已记录积分','success');
+    persist(); toast('已记录积分','success'); render();
     return true;
   });
   const updBal = ()=>{ const v=document.getElementById('p_student')?.value; document.getElementById('p_bal').textContent = v? pointsBalance(v):'0'; };
