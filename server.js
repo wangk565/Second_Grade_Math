@@ -8,13 +8,13 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.SUPABASE_DB_URL;
-const USE_POSTGRES = Boolean(DATABASE_URL);
+let USE_POSTGRES = Boolean(DATABASE_URL);
 const inMemoryState = {
   appState: null,
   users: {},
 };
 
-const db = USE_POSTGRES ? new Pool({
+let db = USE_POSTGRES ? new Pool({
   connectionString: DATABASE_URL,
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 }) : null;
@@ -189,16 +189,23 @@ async function ensureDefaultUser() {
 }
 
 async function initializeDatabase() {
-  if (USE_POSTGRES) {
-    await runSql('CREATE TABLE IF NOT EXISTS app_data (key TEXT PRIMARY KEY, value TEXT)');
-    await runSql('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)');
+  if (USE_POSTGRES && db) {
+    try {
+      await db.query('SELECT 1');
+      await runSql('CREATE TABLE IF NOT EXISTS app_data (key TEXT PRIMARY KEY, value TEXT)');
+      await runSql('CREATE TABLE IF NOT EXISTS users (username TEXT PRIMARY KEY, password TEXT)');
 
-    const row = await getSql('SELECT value FROM app_data WHERE key = ?', ['app_state']);
-    if (!row) {
-      await runSql('INSERT INTO app_data (key, value) VALUES (?, ?)', ['app_state', JSON.stringify(createDefaultState())]);
+      const row = await getSql('SELECT value FROM app_data WHERE key = ?', ['app_state']);
+      if (!row) {
+        await runSql('INSERT INTO app_data (key, value) VALUES (?, ?)', ['app_state', JSON.stringify(createDefaultState())]);
+      }
+      await ensureDefaultUser();
+      return;
+    } catch (error) {
+      console.warn('Postgres unavailable, falling back to in-memory storage:', error.message);
+      db = null;
+      USE_POSTGRES = false;
     }
-    await ensureDefaultUser();
-    return;
   }
 
   inMemoryState.appState = createDefaultState();
