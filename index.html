@@ -260,6 +260,17 @@
   .small-table tr td:last-child{border-right:1px solid var(--border);border-radius:0 10px 10px 0}
 
   .hidden{display:none !important}
+  .auth-screen{position:fixed;inset:0;background:linear-gradient(135deg,#FFF7F2 0%,#FFE8DC 100%);display:flex;align-items:center;justify-content:center;padding:24px;z-index:30}
+  .auth-card{width:min(420px,90vw);background:#fff;border:1px solid var(--border);border-radius:26px;box-shadow:var(--shadow-lg);padding:28px 24px}
+  .auth-title{font-size:28px;font-weight:900;margin-bottom:6px;color:var(--text)}
+  .auth-sub{font-size:13px;color:var(--text-muted);margin-bottom:22px}
+  .auth-form{display:flex;flex-direction:column;gap:16px}
+  .auth-field{display:flex;flex-direction:column;gap:8px}
+  .auth-field label{font-size:12px;font-weight:700;color:var(--text-muted)}
+  .auth-field input{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--border-strong);background:#fff}
+  .auth-field input:focus{outline:none;border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-soft)}
+  .auth-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:6px}
+  .auth-tip{font-size:12px;color:var(--text-muted)}
   .muted{color:var(--text-muted)}
   .text-coral{color:var(--primary-dark)}
   .flex{display:flex}
@@ -290,7 +301,27 @@
 </style>
 </head>
 <body>
-<div id="app">
+<div id="authScreen" class="auth-screen">
+  <div class="auth-card">
+    <div class="auth-title">数学小课堂</div>
+    <div class="auth-sub">请输入账号与密码登录</div>
+    <div class="auth-form">
+      <div class="auth-field">
+        <label for="loginUser">用户名</label>
+        <input id="loginUser" type="text" placeholder="请输入用户名" value="jkyfx" />
+      </div>
+      <div class="auth-field">
+        <label for="loginPass">密码</label>
+        <input id="loginPass" type="password" placeholder="请输入密码" value="wangkun" />
+      </div>
+      <div class="auth-actions">
+        <div class="auth-tip">默认账号：jkyfx</div>
+        <button class="btn btn-primary" id="loginBtn">登录</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="app" class="hidden">
   <aside class="sidebar">
     <div class="brand">
       <div class="brand-logo"><svg viewBox="0 0 24 24" fill="none"><path d="M12 3L1 9l11 6 9-4.91V17h2V9M5 13.18v4L12 21l7-3.82v-4L12 17l-7-3.82z" fill="#fff"/></svg></div>
@@ -486,9 +517,45 @@ const STORE = {
   exams: 'mc_exams_v2',
   points: 'mc_points_v2',
   seeded: 'mc_seeded_v2',
+  auth: 'mc_auth_v1',
 };
+const LOGIN_USER = 'jkyfx';
+const LOGIN_PASS = 'wangkun';
 const load = (k, def) => { try { return JSON.parse(localStorage.getItem(k)) ?? def; } catch { return def; } };
 const save = (k, v) => localStorage.setItem(k, JSON.stringify(v));
+
+function isLoggedIn(){
+  const state = load(STORE.auth, {loggedIn:false});
+  return state.loggedIn === true;
+}
+function setLoggedIn(flag){
+  save(STORE.auth, { loggedIn: !!flag, username: flag ? LOGIN_USER : '' });
+}
+function showApp(){
+  document.getElementById('app').classList.remove('hidden');
+  document.getElementById('authScreen').classList.add('hidden');
+}
+function showLogin(){
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('authScreen').classList.remove('hidden');
+}
+function handleLogin(){
+  const user = document.getElementById('loginUser').value.trim();
+  const pass = document.getElementById('loginPass').value;
+  if(user===LOGIN_USER && pass===LOGIN_PASS){
+    setLoggedIn(true);
+    showApp();
+    render();
+    return;
+  }
+  toast('用户名或密码错误','error');
+}
+function logout(){
+  setLoggedIn(false);
+  showLogin();
+  document.getElementById('loginUser').value = LOGIN_USER;
+  document.getElementById('loginPass').value = LOGIN_PASS;
+}
 
 let db = {
   students: load(STORE.students, []),
@@ -644,6 +711,9 @@ function render(){
   content.innerHTML = '';
   const topActions = document.getElementById('topActions');
   topActions.innerHTML = '';
+  if (isLoggedIn()) {
+    topActions.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="logout()">${ico('close')}退出登录</button>`;
+  }
 
   if (currentView==='students' && detailStudentId){
     renderStudentDetail(content, topActions);
@@ -1274,7 +1344,14 @@ function toast(msg, type='info'){
 }
 
 /* ---------- 启动 ---------- */
-render();
+document.getElementById('loginBtn').onclick = handleLogin;
+document.getElementById('loginPass').addEventListener('keydown',(e)=>{ if(e.key==='Enter') handleLogin(); });
+if (isLoggedIn()) {
+  showApp();
+  render();
+} else {
+  showLogin();
+}
 </script>
 </body>
 </html>
