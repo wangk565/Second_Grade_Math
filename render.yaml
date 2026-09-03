@@ -3,7 +3,7 @@ services:
     name: second-grade-math-api
     runtime: node
     plan: free
-    buildCommand: npm install
+    buildCommand: npm ci
     startCommand: npm start
     envVars:
       - key: NODE_ENV
@@ -13,7 +13,7 @@ services:
       - key: ADMIN_USERNAME
         value: jkyfx
       - key: ADMIN_PASSWORD
-        value: wangkun
+        sync: false
       - key: DATABASE_URL
         sync: false
       - key: FRONTEND_ORIGIN

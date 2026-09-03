@@ -19,6 +19,11 @@ let db = USE_POSTGRES ? new Pool({
   ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 }) : null;
 
+function toPostgresQuery(sql) {
+  let index = 0;
+  return sql.replace(/\?/g, () => `$${++index}`);
+}
+
 const STUDENT_ROSTER = {
   c1: [
     { studentId: 1, region: '东', name: '白瑜成', gender: '男' },
@@ -138,7 +143,7 @@ function createDefaultState() {
 
 function runSql(sql, params = []) {
   if (USE_POSTGRES) {
-    return db.query(sql, params);
+    return db.query(toPostgresQuery(sql), params);
   }
 
   if (sql.includes('INSERT INTO users')) {
@@ -158,7 +163,7 @@ function runSql(sql, params = []) {
 
 function getSql(sql, params = []) {
   if (USE_POSTGRES) {
-    return db.query(sql, params).then((result) => result.rows[0] || null);
+    return db.query(toPostgresQuery(sql), params).then((result) => result.rows[0] || null);
   }
 
   if (sql.includes('SELECT value FROM app_data WHERE key = ?')) {
@@ -258,7 +263,7 @@ app.use(session({
   proxy: true,
   cookie: {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
     secure: process.env.NODE_ENV === 'production' || !!process.env.RENDER,
     maxAge: 1000 * 60 * 60 * 24 * 7,
   },
@@ -270,7 +275,7 @@ function requireAuth(req, res, next) {
 }
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, time: new Date().toISOString(), mode: USE_POSTGRES ? 'postgres' : 'sqlite' });
+  res.json({ ok: true, time: new Date().toISOString(), mode: USE_POSTGRES ? 'postgres' : 'memory' });
 });
 
 app.get('/api/session', (req, res) => {
